@@ -438,7 +438,7 @@ app.get('/debug-env', (req, res) => {
     console.log('📊 Querying users table...');
     const { data: users, error } = await client
       .from('users')
-      .select('id, email, name, role, phone, store_id, company_id, is_active, created_at, updated_at, last_login')
+      .select('id, email, fullname, role, phone, store_id, company_id, is_active, created_at, updated_at, last_login')
       .order('created_at', { ascending: false });
 
     if (error) {
