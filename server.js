@@ -219,7 +219,6 @@
     next();
   });
 
-  // JWT Secret
   const JWT_SECRET = process.env.JWT_SECRET;
 
   // Helper function to generate JWT token
