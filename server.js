@@ -420,52 +420,61 @@ app.get('/debug-env', (req, res) => {
   // NEW: Sync endpoints for getting data from Supabase
 
   // Get all users from Supabase for syncing
-  app.get('/sync/users', async (req, res) => {
-    try {
-      console.log('🔄 Sync users request received');
+ app.get('/sync/users', async (req, res) => {
+  try {
+    console.log('🔄 Sync users request received');
 
-      const client = await getSupabaseClient();
-      
-      if (!client) {
-        return res.status(503).json({
-          error: 'Database connection not available',
-          code: 'SERVICE_UNAVAILABLE'
-        });
-      }
-
-      // Get all users from Supabase (excluding password for security)
-      const { data: users, error } = await client
-        .from('users')
-        .select('id, email, name, role, phone, is_active, created_at, updated_at, last_login')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('❌ Failed to fetch users:', error.message);
-        return res.status(500).json({ 
-          error: 'Failed to fetch users from database',
-          code: 'DB_ERROR',
-          details: error.message
-        });
-      }
-
-      console.log(`✅ Retrieved ${users?.length || 0} users for sync`);
-
-      res.json({
-        users: users || [],
-        count: users?.length || 0,
-        timestamp: new Date().toISOString(),
-        source: 'supabase'
-      });
-
-    } catch (error) {
-      console.error('❌ Sync users error:', error.message);
-      res.status(500).json({ 
-        error: 'Internal server error during sync',
-        code: 'INTERNAL_ERROR'
+    const client = await getSupabaseClient();
+    
+    if (!client) {
+      console.log('⚠️ No Supabase client available');
+      return res.status(503).json({
+        error: 'Database connection not available',
+        code: 'SERVICE_UNAVAILABLE'
       });
     }
-  });
 
+    // Get all users from Supabase (excluding password for security)
+    console.log('📊 Querying users table...');
+    const { data: users, error } = await client
+      .from('users')
+      .select('id, email, name, role, phone, store_id, company_id, is_active, created_at, updated_at, last_login')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ Database query failed:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
+      
+      return res.status(500).json({ 
+        error: 'Failed to fetch users from database',
+        code: 'DB_ERROR',
+        details: error.message,
+        hint: error.hint || 'Check if users table exists in Supabase'
+      });
+    }
+
+    console.log(`✅ Retrieved ${users?.length || 0} users for sync`);
+
+    res.json({
+      users: users || [],
+      count: users?.length || 0,
+      timestamp: new Date().toISOString(),
+      source: 'supabase'
+    });
+
+  } catch (error) {
+    console.error('❌ Sync users error:', error.message, error.stack);
+    res.status(500).json({ 
+      error: 'Internal server error during sync',
+      code: 'INTERNAL_ERROR',
+      details: error.message
+    });
+  }
+});
   // Get all data for complete sync (users only for now, can expand later)
   app.get('/sync/all', async (req, res) => {
     try {
