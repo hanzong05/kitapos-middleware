@@ -204,7 +204,15 @@
       console.error('Demo data initialization error:', error.message);
     }
   }
-
+// Add this endpoint temporarily for debugging
+app.get('/debug-env', (req, res) => {
+  res.json({
+    supabase_url: process.env.SUPABASE_URL ? `Set (${process.env.SUPABASE_URL.substring(0, 20)}...)` : '❌ NOT SET',
+    service_key: process.env.SUPABASE_SERVICE_ROLE_KEY ? `Set (${process.env.SUPABASE_SERVICE_ROLE_KEY.substring(0, 20)}...)` : '❌ NOT SET',
+    jwt_secret: process.env.JWT_SECRET ? 'Set (hidden)' : '❌ NOT SET',
+    all_env_keys: Object.keys(process.env).filter(k => k.includes('SUPABASE') || k.includes('JWT'))
+  });
+});
   // Middleware
   app.use(cors({
     origin: process.env.CORS_ORIGIN || '*',
