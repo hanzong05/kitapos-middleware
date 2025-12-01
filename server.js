@@ -1211,7 +1211,7 @@ app.get('/sync/all', async (req, res) => {
   // Register endpoint
   app.post('/auth/register', async (req, res) => {
     try {
-      const { email, password, name, role, phone } = req.body;
+      const { email, password, name, role, phone , store_id , company_id } = req.body;
 
       console.log(`📝 Registration attempt for: ${email}`);
 
