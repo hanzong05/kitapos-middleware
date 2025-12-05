@@ -2250,9 +2250,20 @@ app.get('/companies', authenticateToken, requireRole(['super_admin']), async (re
     });
   }
 });
-app.get('/companies', authenticateToken, requireRole(['super_admin']), async (req, res) => {
+
+
+// Add this endpoint to your server.js file
+
+// ========================= COMPANIES ENDPOINTS =========================
+
+// GET /companies - Fetch all companies (Super Admin only can see all, others see their own)
+app.get('/companies', authenticateToken, async (req, res) => {
   try {
-    console.log('🔄 Get companies request received');
+    console.log('🔄 Get companies request received from user:', {
+      userId: req.user.id,
+      userRole: req.user.role,
+      userCompanyId: req.user.company_id
+    });
 
     const client = await getSupabaseClient();
     
@@ -2263,14 +2274,46 @@ app.get('/companies', authenticateToken, requireRole(['super_admin']), async (re
       });
     }
 
-    const { data: companies, error } = await client
+    let query = client
       .from('companies')
       .select(`
-        *,
+        id,
+        name,
+        description,
+        logo_url,
+        website,
+        contact_email,
+        contact_phone,
+        address,
+        tax_id,
+        email,
+        phone,
+        is_active,
+        created_at,
+        updated_at,
         stores:stores(count)
       `)
       .eq('is_active', true)
       .order('created_at', { ascending: false });
+
+    // Apply filtering based on user role
+    if (req.user.role === 'super_admin') {
+      // Super admin can see all companies
+      console.log('👑 Super admin accessing all companies');
+    } else if (req.user.company_id) {
+      // Other roles can only see their own company
+      console.log(`🏢 User accessing their company: ${req.user.company_id}`);
+      query = query.eq('id', req.user.company_id);
+    } else {
+      // If user has no company_id, return empty array
+      return res.json({
+        companies: [],
+        count: 0,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const { data: companies, error } = await query;
 
     if (error) {
       console.error('❌ Failed to fetch companies:', error.message);
@@ -2281,16 +2324,258 @@ app.get('/companies', authenticateToken, requireRole(['super_admin']), async (re
       });
     }
 
-    console.log(`✅ Retrieved ${companies?.length || 0} companies`);
+    // Format the response to include store count
+    const formattedCompanies = (companies || []).map(company => ({
+      id: company.id,
+      name: company.name,
+      description: company.description,
+      logo_url: company.logo_url,
+      website: company.website,
+      contact_email: company.contact_email,
+      contact_phone: company.contact_phone,
+      address: company.address,
+      tax_id: company.tax_id,
+      email: company.email,
+      phone: company.phone,
+      is_active: company.is_active,
+      created_at: company.created_at,
+      updated_at: company.updated_at,
+      stores_count: company.stores?.[0]?.count || 0
+    }));
+
+    console.log(`✅ Retrieved ${formattedCompanies?.length || 0} companies`);
 
     res.json({
-      companies: companies || [],
-      count: companies?.length || 0,
+      companies: formattedCompanies || [],
+      count: formattedCompanies?.length || 0,
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
     console.error('❌ Get companies error:', error.message);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR'
+    });
+  }
+});
+
+// POST /companies - Create new company (Super Admin only)
+app.post('/companies', authenticateToken, requireRole(['super_admin']), async (req, res) => {
+  try {
+    const { 
+      name, 
+      description, 
+      logo_url, 
+      website, 
+      contact_email, 
+      contact_phone, 
+      address, 
+      tax_id,
+      email,
+      phone
+    } = req.body;
+
+    console.log(`📝 Creating company: ${name}`);
+
+    // Validate required fields
+    if (!name) {
+      return res.status(400).json({ 
+        error: 'Company name is required',
+        code: 'MISSING_FIELDS'
+      });
+    }
+
+    const client = await getSupabaseClient();
+    
+    if (!client) {
+      return res.status(503).json({
+        error: 'Database connection not available',
+        code: 'SERVICE_UNAVAILABLE'
+      });
+    }
+
+    // Check if company name already exists
+    const { data: existingCompany } = await client
+      .from('companies')
+      .select('id, name')
+      .eq('name', name.trim())
+      .eq('is_active', true)
+      .single();
+
+    if (existingCompany) {
+      return res.status(409).json({ 
+        error: `Company "${name}" already exists`,
+        code: 'COMPANY_EXISTS'
+      });
+    }
+
+    // Create company
+    const companyData = {
+      name: name.trim(),
+      description: description || null,
+      logo_url: logo_url || null,
+      website: website || null,
+      contact_email: contact_email || email || null,
+      contact_phone: contact_phone || phone || null,
+      address: address || null,
+      tax_id: tax_id || null,
+      email: email || null,
+      phone: phone || null,
+      settings: {},
+      is_active: true,
+      created_by: req.user.id,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    const { data: newCompany, error: insertError } = await client
+      .from('companies')
+      .insert([companyData])
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Database error creating company:', insertError.message);
+      return res.status(400).json({ 
+        error: 'Failed to create company',
+        code: 'DB_INSERT_ERROR',
+        details: insertError.message
+      });
+    }
+
+    console.log('✅ Company created successfully:', newCompany.name);
+
+    res.status(201).json({
+      message: 'Company created successfully',
+      company: newCompany
+    });
+
+  } catch (error) {
+    console.error('❌ Create company error:', error.message);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR'
+    });
+  }
+});
+
+// PUT /companies/:companyId - Update company (Super Admin only)
+app.put('/companies/:companyId', authenticateToken, requireRole(['super_admin']), async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const updates = req.body;
+
+    console.log(`📝 Updating company: ${companyId}`);
+
+    const client = await getSupabaseClient();
+    
+    if (!client) {
+      return res.status(503).json({
+        error: 'Database connection not available',
+        code: 'SERVICE_UNAVAILABLE'
+      });
+    }
+
+    // Prepare update data
+    const updateData = {
+      ...updates,
+      updated_at: new Date().toISOString()
+    };
+
+    // Remove fields that shouldn't be updated
+    delete updateData.id;
+    delete updateData.created_at;
+    delete updateData.created_by;
+
+    const { data: updatedCompany, error } = await client
+      .from('companies')
+      .update(updateData)
+      .eq('id', companyId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Update company error:', error.message);
+      return res.status(400).json({ 
+        error: 'Failed to update company',
+        code: 'DB_UPDATE_ERROR',
+        details: error.message
+      });
+    }
+
+    if (!updatedCompany) {
+      return res.status(404).json({ 
+        error: 'Company not found',
+        code: 'COMPANY_NOT_FOUND'
+      });
+    }
+
+    console.log('✅ Company updated successfully:', updatedCompany.name);
+
+    res.json({
+      message: 'Company updated successfully',
+      company: updatedCompany
+    });
+
+  } catch (error) {
+    console.error('❌ Update company error:', error.message);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR'
+    });
+  }
+});
+
+// DELETE /companies/:companyId - Delete company (Super Admin only - soft delete)
+app.delete('/companies/:companyId', authenticateToken, requireRole(['super_admin']), async (req, res) => {
+  try {
+    const { companyId } = req.params;
+
+    console.log(`🗑️ Deleting company: ${companyId}`);
+
+    const client = await getSupabaseClient();
+    
+    if (!client) {
+      return res.status(503).json({
+        error: 'Database connection not available',
+        code: 'SERVICE_UNAVAILABLE'
+      });
+    }
+
+    const { data: deletedCompany, error } = await client
+      .from('companies')
+      .update({ 
+        is_active: false,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', companyId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Delete company error:', error.message);
+      return res.status(400).json({ 
+        error: 'Failed to delete company',
+        code: 'DB_DELETE_ERROR'
+      });
+    }
+
+    if (!deletedCompany) {
+      return res.status(404).json({ 
+        error: 'Company not found',
+        code: 'COMPANY_NOT_FOUND'
+      });
+    }
+
+    console.log('✅ Company deleted successfully:', deletedCompany.name);
+
+    res.json({
+      message: 'Company deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('❌ Delete company error:', error.message);
     res.status(500).json({ 
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
