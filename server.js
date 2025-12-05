@@ -427,7 +427,7 @@
       // Get all users from Supabase (excluding password for security)
       const { data: users, error } = await client
         .from('users')
-        .select('id, email, name, role, phone, is_active, created_at, updated_at, last_login')
+        .select('id, email, name, role, phone , company_id, is_active, created_at, updated_at, last_login')
         .order('created_at', { ascending: false });
 
       if (error) {
