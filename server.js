@@ -432,12 +432,14 @@ app.get('/sync/users', async (req, res) => {
         name, 
         role, 
         phone, 
+        store_id,
         company_id, 
         is_active, 
         created_at, 
         updated_at, 
         last_login,
         companies!company_id(name)
+        stores!store_id(name)  
       `)
       .order('created_at', { ascending: false });
 
