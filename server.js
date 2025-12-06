@@ -423,7 +423,7 @@ app.get('/sync/users', async (req, res) => {
       });
     }
 
-    // Get all users with company name using JOIN
+    // ✅ Add filter for visible users
     const { data: users, error } = await client
       .from('users')
       .select(`
@@ -433,16 +433,16 @@ app.get('/sync/users', async (req, res) => {
         role, 
         phone, 
         store_id,
-        visible,
         company_id, 
-        is_active, 
+        is_active,
+        visible,
         created_at, 
         updated_at, 
         last_login,
-        companies!company_id(name)
+        companies!company_id(name),
         stores!store_id(name)  
       `)
-      .eq('visible', true) 
+      .eq('visible', true)  // ✅ Only get visible users
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -454,24 +454,24 @@ app.get('/sync/users', async (req, res) => {
       });
     }
 
-    // Format the data to include company_name at root level
-   const formattedUsers = (users || []).map(user => ({
-  id: user.id,
-  email: user.email,
-  name: user.name,
-  role: user.role,
-  phone: user.phone,
-  company_id: user.company_id,
-  company_name: user.companies?.name || 'Unknown Company',
-  store_id: user.store_id,                        // 👈 Add this
-  store_name: user.stores?.name || 'No Store',    // 👈 Add this
-  is_active: user.is_active,
-  created_at: user.created_at,
-  updated_at: user.updated_at,
-  last_login: user.last_login
-}));
+    const formattedUsers = (users || []).map(user => ({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      phone: user.phone,
+      company_id: user.company_id,
+      company_name: user.companies?.name || 'Unknown Company',
+      store_id: user.store_id,
+      store_name: user.stores?.name || 'No Store',
+      is_active: user.is_active,
+      visible: user.visible,
+      created_at: user.created_at,
+      updated_at: user.updated_at,
+      last_login: user.last_login
+    }));
 
-    console.log(`✅ Retrieved ${formattedUsers?.length || 0} users for sync`);
+    console.log(`✅ Retrieved ${formattedUsers?.length || 0} visible users for sync`);
 
     res.json({
       users: formattedUsers || [],
