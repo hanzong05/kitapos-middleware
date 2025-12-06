@@ -486,6 +486,62 @@ app.get('/sync/users', async (req, res) => {
     });
   }
 });
+
+app.delete('/users/:userId', authenticateToken, requireRole(['super_admin', 'manager']), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    console.log(`🗑️ Soft deleting user: ${userId}`);
+    
+    const client = await getSupabaseClient();
+    
+    if (!client) {
+      return res.status(503).json({
+        error: 'Database connection not available',
+        code: 'SERVICE_UNAVAILABLE'
+      });
+    }
+
+    // Soft delete - set is_active to false
+    const { data: deletedUser, error } = await client
+      .from('users')
+      .update({ 
+        is_active: false,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId)
+      .select('id, email, name, is_active')
+      .single();
+
+    if (error) {
+      console.error('Delete user error:', error.message);
+      return res.status(400).json({ 
+        error: 'Failed to delete user',
+        code: 'DB_DELETE_ERROR',
+        details: error.message
+      });
+    }
+
+    if (!deletedUser) {
+      return res.status(404).json({ 
+        error: 'User not found',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+
+    console.log('✅ User soft deleted:', deletedUser.email);
+    res.json({
+      message: 'User deleted successfully',
+      user: deletedUser
+    });
+
+  } catch (error) {
+    console.error('❌ Delete user error:', error.message);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR'
+    });
+  }
+});
   // Get all data for complete sync (users only for now, can expand later)
   app.get('/sync/all', async (req, res) => {
     try {
