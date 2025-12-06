@@ -433,6 +433,7 @@ app.get('/sync/users', async (req, res) => {
         role, 
         phone, 
         store_id,
+        visible,
         company_id, 
         is_active, 
         created_at, 
@@ -441,6 +442,7 @@ app.get('/sync/users', async (req, res) => {
         companies!company_id(name)
         stores!store_id(name)  
       `)
+      .eq('visible', true) 
       .order('created_at', { ascending: false });
 
     if (error) {
