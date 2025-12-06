@@ -453,19 +453,21 @@ app.get('/sync/users', async (req, res) => {
     }
 
     // Format the data to include company_name at root level
-    const formattedUsers = (users || []).map(user => ({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      phone: user.phone,
-      company_id: user.company_id,
-      company_name: user.companies?.name || 'Unknown Company',
-      is_active: user.is_active,
-      created_at: user.created_at,
-      updated_at: user.updated_at,
-      last_login: user.last_login
-    }));
+   const formattedUsers = (users || []).map(user => ({
+  id: user.id,
+  email: user.email,
+  name: user.name,
+  role: user.role,
+  phone: user.phone,
+  company_id: user.company_id,
+  company_name: user.companies?.name || 'Unknown Company',
+  store_id: user.store_id,                        // 👈 Add this
+  store_name: user.stores?.name || 'No Store',    // 👈 Add this
+  is_active: user.is_active,
+  created_at: user.created_at,
+  updated_at: user.updated_at,
+  last_login: user.last_login
+}));
 
     console.log(`✅ Retrieved ${formattedUsers?.length || 0} users for sync`);
 
