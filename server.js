@@ -1232,7 +1232,73 @@ app.get('/sync/all', async (req, res) => {
     });
   }
 });
+app.put('/users/:userId', authenticateToken, requireRole(['super_admin', 'manager']), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { name, email, phone, role, store_id, company_id } = req.body;
 
+    console.log(`📝 Updating user: ${userId}`);
+
+    const client = await getSupabaseClient();
+    
+    if (!client) {
+      return res.status(503).json({
+        error: 'Database connection not available',
+        code: 'SERVICE_UNAVAILABLE'
+      });
+    }
+
+    // Prepare update data
+    const updateData = {
+      updated_at: new Date().toISOString()
+    };
+
+    // Only add fields that are provided
+    if (name) updateData.name = name.trim();
+    if (email) updateData.email = email.toLowerCase().trim();
+    if (phone) updateData.phone = phone.trim();
+    if (role) updateData.role = role;
+    if (store_id) updateData.store_id = store_id;
+    if (company_id) updateData.company_id = company_id;
+
+    const { data: updatedUser, error } = await client
+      .from('users')
+      .update(updateData)
+      .eq('id', userId)
+      .select('id, email, name, role, phone, store_id, company_id, is_active, created_at, updated_at')
+      .single();
+
+    if (error) {
+      console.error('Update user error:', error.message);
+      return res.status(400).json({ 
+        error: 'Failed to update user',
+        code: 'DB_UPDATE_ERROR',
+        details: error.message
+      });
+    }
+
+    if (!updatedUser) {
+      return res.status(404).json({ 
+        error: 'User not found',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+
+    console.log('✅ User updated successfully:', updatedUser.email);
+
+    res.json({
+      message: 'User updated successfully',
+      user: updatedUser
+    });
+
+  } catch (error) {
+    console.error('❌ Update user error:', error.message);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR'
+    });
+  }
+});
   // Register endpoint
   app.post('/auth/register', async (req, res) => {
     try {
