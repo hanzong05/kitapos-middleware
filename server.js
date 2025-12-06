@@ -1,4 +1,4 @@
-  // server.js - Added sync endpoints for getting users data
+ // server.js - Added sync endpoints for getting users data
   const express = require('express');
   const cors = require('cors');
   const jwt = require('jsonwebtoken');
@@ -423,7 +423,7 @@ app.get('/sync/users', async (req, res) => {
       });
     }
 
-    // Get all users with company and store names
+    // Get all users with company name using JOIN
     const { data: users, error } = await client
       .from('users')
       .select(`
@@ -434,15 +434,13 @@ app.get('/sync/users', async (req, res) => {
         phone, 
         store_id,
         company_id, 
-        is_active,
-        visible,
+        is_active, 
         created_at, 
         updated_at, 
         last_login,
-        companies!company_id(name),
+        companies!company_id(name)
         stores!store_id(name)  
       `)
-      .eq('visible', true)  // ✅ Only get visible users
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -454,24 +452,24 @@ app.get('/sync/users', async (req, res) => {
       });
     }
 
-    const formattedUsers = (users || []).map(user => ({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      phone: user.phone,
-      company_id: user.company_id,
-      company_name: user.companies?.name || 'Unknown Company',
-      store_id: user.store_id,
-      store_name: user.stores?.name || 'No Store',
-      is_active: user.is_active,
-      visible: user.visible,
-      created_at: user.created_at,
-      updated_at: user.updated_at,
-      last_login: user.last_login
-    }));
+    // Format the data to include company_name at root level
+   const formattedUsers = (users || []).map(user => ({
+  id: user.id,
+  email: user.email,
+  name: user.name,
+  role: user.role,
+  phone: user.phone,
+  company_id: user.company_id,
+  company_name: user.companies?.name || 'Unknown Company',
+  store_id: user.store_id,                        // 👈 Add this
+  store_name: user.stores?.name || 'No Store',    // 👈 Add this
+  is_active: user.is_active,
+  created_at: user.created_at,
+  updated_at: user.updated_at,
+  last_login: user.last_login
+}));
 
-    console.log(`✅ Retrieved ${formattedUsers?.length || 0} visible users for sync`);  // ✅ FIXED
+    console.log(`✅ Retrieved ${formattedUsers?.length || 0} users for sync`);
 
     res.json({
       users: formattedUsers || [],
@@ -488,6 +486,7 @@ app.get('/sync/users', async (req, res) => {
     });
   }
 });
+
 app.delete('/users/:userId', authenticateToken, requireRole(['super_admin']), async (req, res) => {
   try {
     const { userId } = req.params;
