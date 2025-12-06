@@ -423,7 +423,7 @@ app.get('/sync/users', async (req, res) => {
       });
     }
 
-    // ✅ Add filter for visible users
+    // Get all users with company and store names
     const { data: users, error } = await client
       .from('users')
       .select(`
@@ -471,7 +471,7 @@ app.get('/sync/users', async (req, res) => {
       last_login: user.last_login
     }));
 
-    console.log(`✅ Retrieved ${formattedUsers?.length || 0} visible users for sync`);
+    console.log(`✅ Retrieved ${formattedUsers?.length || 0} visible users for sync`);  // ✅ FIXED
 
     res.json({
       users: formattedUsers || [],
@@ -488,7 +488,6 @@ app.get('/sync/users', async (req, res) => {
     });
   }
 });
-
 app.delete('/users/:userId', authenticateToken, requireRole(['super_admin']), async (req, res) => {
   try {
     const { userId } = req.params;
