@@ -487,7 +487,7 @@ app.get('/sync/users', async (req, res) => {
   }
 });
 
-app.delete('/users/:userId', authenticateToken, requireRole(['super_admin', 'manager']), async (req, res) => {
+app.delete('/users/:userId', authenticateToken, requireRole(['super_admin']), async (req, res) => {
   try {
     const { userId } = req.params;
     console.log(`🗑️ Soft deleting user: ${userId}`);
@@ -505,11 +505,11 @@ app.delete('/users/:userId', authenticateToken, requireRole(['super_admin', 'man
     const { data: deletedUser, error } = await client
       .from('users')
       .update({ 
-        is_active: false,
+        visible: false,
         updated_at: new Date().toISOString()
       })
       .eq('id', userId)
-      .select('id, email, name, is_active')
+      .select('id, email, name, visible')
       .single();
 
     if (error) {
