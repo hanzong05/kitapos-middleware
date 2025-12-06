@@ -411,7 +411,7 @@
   // NEW: Sync endpoints for getting data from Supabase
 
   // Get all users from Supabase for syncing
-app.get('/sync/users', async (req, res) => {
+app.get('/users', async (req, res) => {
   try {
     console.log('🔄 Sync users request received');
     const client = await getSupabaseClient();
