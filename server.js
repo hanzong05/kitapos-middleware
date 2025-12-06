@@ -726,7 +726,10 @@ app.get('/staff', authenticateToken, requireRole(['super_admin', 'manager']), as
 
     let query = client
       .from('staff')
-      .select('*')
+      .select(`
+        *,
+        stores!store_id(name)
+      `) // ✅ Added JOIN to get store name
       .eq('is_active', true)
       .order('created_at', { ascending: false });
 
@@ -755,10 +758,11 @@ app.get('/staff', authenticateToken, requireRole(['super_admin', 'manager']), as
       });
     }
 
-    // FIXED: Map position back to role for consistency
+    // ✅ Format staff data to include store_name at root level
     const staffWithRole = staff.map(member => ({
       ...member,
-      role: member.position || member.role || 'staff' // Ensure role field exists
+      role: member.position || member.role || 'staff',
+      store_name: member.stores?.name || 'No Store' // ✅ Add store_name
     }));
 
     console.log(`✅ Retrieved ${staffWithRole?.length || 0} staff members`);
