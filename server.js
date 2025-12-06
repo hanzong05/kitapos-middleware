@@ -505,11 +505,11 @@ app.delete('/users/:userId', authenticateToken, requireRole(['super_admin']), as
     const { data: deletedUser, error } = await client
       .from('users')
       .update({ 
-        visible: false,
+        is_active: false,
         updated_at: new Date().toISOString()
       })
       .eq('id', userId)
-      .select('id, email, name, visible')
+      .select('id, email, name, is_active')
       .single();
 
     if (error) {
