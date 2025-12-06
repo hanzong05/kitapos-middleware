@@ -1,421 +1,421 @@
- // server.js - Added sync endpoints for getting users data
-  const express = require('express');
-  const cors = require('cors');
-  const jwt = require('jsonwebtoken');
-  const bcrypt = require('bcryptjs');
-  const { createClient } = require('@supabase/supabase-js');
+// server.js - Added sync endpoints for getting users data
+const express = require('express');
+const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const { createClient } = require('@supabase/supabase-js');
 
-  const app = express();
-  const PORT = process.env.PORT || 3000;
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-  // Enhanced environment variable validation
-  function validateEnvVars() {
-    const required = {
-      'SUPABASE_URL': process.env.SUPABASE_URL,
-      'SUPABASE_SERVICE_ROLE_KEY': process.env.SUPABASE_SERVICE_ROLE_KEY,
-      'JWT_SECRET': process.env.JWT_SECRET
-    };
-    
-    const missing = [];
-    
-    Object.entries(required).forEach(([key, value]) => {
-      if (!value) {
-        missing.push(key);
-      }
-    });
-    
-    if (missing.length > 0) {
-      console.error('❌ Missing required environment variables:', missing);
-      return false;
+// Enhanced environment variable validation
+function validateEnvVars() {
+  const required = {
+    'SUPABASE_URL': process.env.SUPABASE_URL,
+    'SUPABASE_SERVICE_ROLE_KEY': process.env.SUPABASE_SERVICE_ROLE_KEY,
+    'JWT_SECRET': process.env.JWT_SECRET
+  };
+
+  const missing = [];
+
+  Object.entries(required).forEach(([key, value]) => {
+    if (!value) {
+      missing.push(key);
     }
+  });
 
-    // Fix URL protocol issue
-    if (process.env.SUPABASE_URL && !process.env.SUPABASE_URL.startsWith('http')) {
-      process.env.SUPABASE_URL = 'https://' + process.env.SUPABASE_URL;
-    }
-
-    console.log('✅ All environment variables validated');
-    return true;
+  if (missing.length > 0) {
+    console.error('❌ Missing required environment variables:', missing);
+    return false;
   }
 
-  // Global variables
-  let supabase = null;
-  let initializationPromise = null;
+  // Fix URL protocol issue
+  if (process.env.SUPABASE_URL && !process.env.SUPABASE_URL.startsWith('http')) {
+    process.env.SUPABASE_URL = 'https://' + process.env.SUPABASE_URL;
+  }
 
-  // Initialize Supabase client (lazy initialization)
-  async function getSupabaseClient() {
-    if (supabase) {
-      return supabase;
-    }
+  console.log('✅ All environment variables validated');
+  return true;
+}
 
-    if (initializationPromise) {
-      return initializationPromise;
-    }
+// Global variables
+let supabase = null;
+let initializationPromise = null;
 
-    initializationPromise = initializeSupabase();
+// Initialize Supabase client (lazy initialization)
+async function getSupabaseClient() {
+  if (supabase) {
+    return supabase;
+  }
+
+  if (initializationPromise) {
     return initializationPromise;
   }
 
-  async function initializeSupabase() {
-    try {
-      if (!validateEnvVars()) {
-        throw new Error('Environment validation failed');
-      }
+  initializationPromise = initializeSupabase();
+  return initializationPromise;
+}
 
-      console.log('🔌 Initializing Supabase client...');
-      
-      const supabaseUrl = process.env.SUPABASE_URL;
-      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      
-      supabase = createClient(supabaseUrl, supabaseServiceKey, {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        },
-        db: {
-          schema: 'public'
-        }
-      });
-      
-      console.log('✅ Supabase client created');
-      
-      // Test the connection
-      const testResult = await testSupabaseConnection();
-      
-      if (!testResult.success) {
-        console.error('❌ Supabase connection test failed:', testResult.error);
-        // Don't throw error, just log it - let the app continue with limited functionality
-      } else {
-        console.log('✅ Supabase connection verified');
-        // Initialize demo data only if connection is successful
-        await initializeDemoData();
-      }
-      
-      return supabase;
-      
-    } catch (error) {
-      console.error('❌ Failed to initialize Supabase:', error.message);
-      // Return null instead of throwing to allow app to continue
-      return null;
+async function initializeSupabase() {
+  try {
+    if (!validateEnvVars()) {
+      throw new Error('Environment validation failed');
     }
+
+    console.log('🔌 Initializing Supabase client...');
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      },
+      db: {
+        schema: 'public'
+      }
+    });
+
+    console.log('✅ Supabase client created');
+
+    // Test the connection
+    const testResult = await testSupabaseConnection();
+
+    if (!testResult.success) {
+      console.error('❌ Supabase connection test failed:', testResult.error);
+      // Don't throw error, just log it - let the app continue with limited functionality
+    } else {
+      console.log('✅ Supabase connection verified');
+      // Initialize demo data only if connection is successful
+      await initializeDemoData();
+    }
+
+    return supabase;
+
+  } catch (error) {
+    console.error('❌ Failed to initialize Supabase:', error.message);
+    // Return null instead of throwing to allow app to continue
+    return null;
+  }
+}
+
+// Test Supabase connection
+async function testSupabaseConnection() {
+  if (!supabase) {
+    return { success: false, error: 'Supabase client not initialized' };
   }
 
-  // Test Supabase connection
-  async function testSupabaseConnection() {
-    if (!supabase) {
-      return { success: false, error: 'Supabase client not initialized' };
-    }
-    
-    try {
-      console.log('🧪 Testing Supabase connection...');
-      
-      const { data, error, count } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .limit(1);
+  try {
+    console.log('🧪 Testing Supabase connection...');
 
-      if (error) {
-        console.error('Database query failed:', error.message);
-        return { success: false, error: error.message, details: error };
-      }
-      
-      console.log('✅ Database query successful');
-      return { success: true, data, count };
-      
-    } catch (error) {
-      console.error('Connection test exception:', error.message);
-      return { success: false, error: error.message, exception: true };
+    const { data, error, count } = await supabase
+      .from('users')
+      .select('*', { count: 'exact', head: true })
+      .limit(1);
+
+    if (error) {
+      console.error('Database query failed:', error.message);
+      return { success: false, error: error.message, details: error };
     }
+
+    console.log('✅ Database query successful');
+    return { success: true, data, count };
+
+  } catch (error) {
+    console.error('Connection test exception:', error.message);
+    return { success: false, error: error.message, exception: true };
+  }
+}
+
+// Initialize demo data
+async function initializeDemoData() {
+  if (!supabase) {
+    console.log('⚠️ Skipping demo data - Supabase not available');
+    return;
   }
 
-  // Initialize demo data
-  async function initializeDemoData() {
-    if (!supabase) {
-      console.log('⚠️ Skipping demo data - Supabase not available');
+  try {
+    console.log('🔄 Checking for demo data...');
+
+    // Check if admin user exists
+    const { data: existingAdmin, error: checkError } = await supabase
+      .from('users')
+      .select('id, email')
+      .eq('email', 'admin@techcorp.com')
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('Error checking admin user:', checkError.message);
       return;
     }
 
-    try {
-      console.log('🔄 Checking for demo data...');
-
-      // Check if admin user exists
-      const { data: existingAdmin, error: checkError } = await supabase
-        .from('users')
-        .select('id, email')
-        .eq('email', 'admin@techcorp.com')
-        .single();
-
-      if (checkError && checkError.code !== 'PGRST116') {
-        console.error('Error checking admin user:', checkError.message);
-        return;
-      }
-
-      if (existingAdmin) {
-        console.log('✅ Demo admin user already exists');
-        return;
-      }
-
-      console.log('📝 Creating demo users...');
-
-      // Hash the demo password
-      const hashedPassword = await bcrypt.hash('password123', 12);
-
-      // Create demo users
-      const demoUsers = [
-        {
-          email: 'admin@techcorp.com',
-          password: hashedPassword,
-          name: 'Demo Admin',
-          role: 'super_admin',
-          is_active: true,
-          created_at: new Date().toISOString()
-        },
-        {
-          email: 'manager@techcorp.com',
-          password: hashedPassword,
-          name: 'Demo Manager',
-          role: 'manager',
-          is_active: true,
-          created_at: new Date().toISOString()
-        },
-        {
-          email: 'cashier@techcorp.com',
-          password: hashedPassword,
-          name: 'Demo Cashier',
-          role: 'cashier',
-          is_active: true,
-          created_at: new Date().toISOString()
-        }
-      ];
-
-      const { data: users, error: insertError } = await supabase
-        .from('users')
-        .insert(demoUsers)
-        .select();
-
-      if (insertError) {
-        console.error('Failed to create demo users:', insertError.message);
-        return;
-      }
-
-      console.log('✅ Demo users created:', users.length);
-
-    } catch (error) {
-      console.error('Demo data initialization error:', error.message);
+    if (existingAdmin) {
+      console.log('✅ Demo admin user already exists');
+      return;
     }
+
+    console.log('📝 Creating demo users...');
+
+    // Hash the demo password
+    const hashedPassword = await bcrypt.hash('password123', 12);
+
+    // Create demo users
+    const demoUsers = [
+      {
+        email: 'admin@techcorp.com',
+        password: hashedPassword,
+        name: 'Demo Admin',
+        role: 'super_admin',
+        is_active: true,
+        created_at: new Date().toISOString()
+      },
+      {
+        email: 'manager@techcorp.com',
+        password: hashedPassword,
+        name: 'Demo Manager',
+        role: 'manager',
+        is_active: true,
+        created_at: new Date().toISOString()
+      },
+      {
+        email: 'cashier@techcorp.com',
+        password: hashedPassword,
+        name: 'Demo Cashier',
+        role: 'cashier',
+        is_active: true,
+        created_at: new Date().toISOString()
+      }
+    ];
+
+    const { data: users, error: insertError } = await supabase
+      .from('users')
+      .insert(demoUsers)
+      .select();
+
+    if (insertError) {
+      console.error('Failed to create demo users:', insertError.message);
+      return;
+    }
+
+    console.log('✅ Demo users created:', users.length);
+
+  } catch (error) {
+    console.error('Demo data initialization error:', error.message);
+  }
+}
+
+// Middleware
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || '*',
+  credentials: true
+}));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.path}`);
+  next();
+});
+
+const JWT_SECRET = process.env.JWT_SECRET;
+
+// Helper function to generate JWT token
+const generateToken = (user) => {
+  return jwt.sign(
+    {
+      id: user.id,
+      email: user.email,
+      role: user.role
+    },
+    JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+};
+
+// Enhanced middleware to verify JWT token with better error handling
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({
+      error: 'Access token required',
+      code: 'NO_TOKEN'
+    });
   }
 
-  // Middleware
-  app.use(cors({
-    origin: process.env.CORS_ORIGIN || '*',
-    credentials: true
-  }));
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      console.log('JWT verification failed:', err.message);
 
-  // Request logging middleware
-  app.use((req, res, next) => {
-    console.log(`${req.method} ${req.path}`);
+      // Provide more specific error messages
+      let errorCode = 'INVALID_TOKEN';
+      let errorMessage = 'Invalid or expired token';
+
+      if (err.name === 'TokenExpiredError') {
+        errorCode = 'TOKEN_EXPIRED';
+        errorMessage = 'Token has expired';
+      } else if (err.name === 'JsonWebTokenError') {
+        errorCode = 'MALFORMED_TOKEN';
+        errorMessage = 'Token is malformed';
+      } else if (err.name === 'NotBeforeError') {
+        errorCode = 'TOKEN_NOT_ACTIVE';
+        errorMessage = 'Token not active yet';
+      }
+
+      return res.status(403).json({
+        error: errorMessage,
+        code: errorCode
+      });
+    }
+    req.user = user;
     next();
   });
+};
 
-  const JWT_SECRET = process.env.JWT_SECRET;
+// Optional authentication middleware - doesn't fail if no token
+const optionalAuthentication = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
 
-  // Helper function to generate JWT token
-  const generateToken = (user) => {
-    return jwt.sign(
-      { 
-        id: user.id, 
-        email: user.email, 
-        role: user.role 
-      }, 
-      JWT_SECRET, 
-      { expiresIn: '7d' }
-    );
-  };
+  if (!token) {
+    req.user = null;
+    return next();
+  }
 
-  // Enhanced middleware to verify JWT token with better error handling
-  const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      console.log('Optional auth failed (continuing anyway):', err.message);
+      req.user = null;
+    } else {
+      req.user = user;
+    }
+    next();
+  });
+};
 
-    if (!token) {
-      return res.status(401).json({ 
-        error: 'Access token required',
-        code: 'NO_TOKEN'
+// Role-based authorization middleware
+const requireRole = (roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        error: 'Authentication required',
+        code: 'AUTH_REQUIRED'
       });
     }
 
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-      if (err) {
-        console.log('JWT verification failed:', err.message);
-        
-        // Provide more specific error messages
-        let errorCode = 'INVALID_TOKEN';
-        let errorMessage = 'Invalid or expired token';
-        
-        if (err.name === 'TokenExpiredError') {
-          errorCode = 'TOKEN_EXPIRED';
-          errorMessage = 'Token has expired';
-        } else if (err.name === 'JsonWebTokenError') {
-          errorCode = 'MALFORMED_TOKEN';
-          errorMessage = 'Token is malformed';
-        } else if (err.name === 'NotBeforeError') {
-          errorCode = 'TOKEN_NOT_ACTIVE';
-          errorMessage = 'Token not active yet';
-        }
-        
-        return res.status(403).json({ 
-          error: errorMessage,
-          code: errorCode
-        });
-      }
-      req.user = user;
-      next();
-    });
-  };
-
-  // Optional authentication middleware - doesn't fail if no token
-  const optionalAuthentication = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token) {
-      req.user = null;
-      return next();
+    const allowedRoles = Array.isArray(roles) ? roles : [roles];
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({
+        error: 'Insufficient permissions',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        requiredRoles: allowedRoles,
+        userRole: req.user.role
+      });
     }
-
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-      if (err) {
-        console.log('Optional auth failed (continuing anyway):', err.message);
-        req.user = null;
-      } else {
-        req.user = user;
-      }
-      next();
-    });
+    next();
   };
+};
 
-  // Role-based authorization middleware
-  const requireRole = (roles) => {
-    return (req, res, next) => {
-      if (!req.user) {
-        return res.status(401).json({ 
-          error: 'Authentication required',
-          code: 'AUTH_REQUIRED'
-        });
-      }
-      
-      const allowedRoles = Array.isArray(roles) ? roles : [roles];
-      if (!allowedRoles.includes(req.user.role)) {
-        return res.status(403).json({ 
-          error: 'Insufficient permissions',
-          code: 'INSUFFICIENT_PERMISSIONS',
-          requiredRoles: allowedRoles,
-          userRole: req.user.role
-        });
-      }
-      next();
-    };
-  };
+// Routes
 
-  // Routes
-
-  // Root endpoint
-  app.get('/', (req, res) => {
-    res.json({ 
-      message: 'POS System API Server Running',
-      status: 'active',
-      timestamp: new Date().toISOString(),
-      version: '1.0.0',
-      environment: process.env.NODE_ENV || 'development',
-      endpoints: {
-        health: '/health',
-        auth: {
-          login: '/auth/login',
-          register: '/auth/register',
-          profile: '/auth/profile'
-        },
-        sync: {
-          users: '/sync/users',
-          all: '/sync/all'
-        }
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    message: 'POS System API Server Running',
+    status: 'active',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+    environment: process.env.NODE_ENV || 'development',
+    endpoints: {
+      health: '/health',
+      auth: {
+        login: '/auth/login',
+        register: '/auth/register',
+        profile: '/auth/profile'
+      },
+      sync: {
+        users: '/users',
+        all: '/sync/all'
       }
-    });
+    }
   });
+});
 
-  // Health check endpoint
-  app.get('/health', async (req, res) => {
-    const startTime = Date.now();
-    
-    try {
-      console.log('🔍 Health check started...');
-      
-      let healthData = {
-        status: 'checking',
-        database: 'testing',
-        timestamp: new Date().toISOString(),
-        supabase_url: process.env.SUPABASE_URL,
-        server: {
-          uptime: process.uptime(),
-          memory: process.memoryUsage(),
-          version: process.version,
-          environment: process.env.NODE_ENV || 'development'
-        },
-        response_time_ms: 0
-      };
+// Health check endpoint
+app.get('/health', async (req, res) => {
+  const startTime = Date.now();
 
-      // Try to get Supabase client and test connection
-      const client = await getSupabaseClient();
-      
-      if (client) {
-        const testResult = await testSupabaseConnection();
-        
-        if (testResult.success) {
-          healthData.status = 'healthy';
-          healthData.database = 'connected';
-          healthData.user_count = testResult.count || 0;
-        } else {
-          healthData.status = 'unhealthy';
-          healthData.database = 'disconnected';
-          healthData.error = testResult.error;
-          healthData.error_details = testResult.details;
-        }
+  try {
+    console.log('🔍 Health check started...');
+
+    let healthData = {
+      status: 'checking',
+      database: 'testing',
+      timestamp: new Date().toISOString(),
+      supabase_url: process.env.SUPABASE_URL,
+      server: {
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        version: process.version,
+        environment: process.env.NODE_ENV || 'development'
+      },
+      response_time_ms: 0
+    };
+
+    // Try to get Supabase client and test connection
+    const client = await getSupabaseClient();
+
+    if (client) {
+      const testResult = await testSupabaseConnection();
+
+      if (testResult.success) {
+        healthData.status = 'healthy';
+        healthData.database = 'connected';
+        healthData.user_count = testResult.count || 0;
       } else {
         healthData.status = 'unhealthy';
-        healthData.database = 'initialization_failed';
-        healthData.error = 'Could not initialize Supabase client';
+        healthData.database = 'disconnected';
+        healthData.error = testResult.error;
+        healthData.error_details = testResult.details;
       }
-      
-      healthData.response_time_ms = Date.now() - startTime;
-      
-      const statusCode = healthData.status === 'healthy' ? 200 : 503;
-      console.log(`Health check completed: ${healthData.status} (${healthData.response_time_ms}ms)`);
-      
-      res.status(statusCode).json(healthData);
-
-    } catch (error) {
-      const responseTime = Date.now() - startTime;
-      console.error('Health check error:', error.message);
-      
-      res.status(500).json({ 
-        status: 'error',
-        database: 'error',
-        error: error.message,
-        timestamp: new Date().toISOString(),
-        response_time_ms: responseTime
-      });
+    } else {
+      healthData.status = 'unhealthy';
+      healthData.database = 'initialization_failed';
+      healthData.error = 'Could not initialize Supabase client';
     }
-  });
 
-  // NEW: Sync endpoints for getting data from Supabase
+    healthData.response_time_ms = Date.now() - startTime;
 
-  // Get all users from Supabase for syncing
-app.get('/sync/users', async (req, res) => {
+    const statusCode = healthData.status === 'healthy' ? 200 : 503;
+    console.log(`Health check completed: ${healthData.status} (${healthData.response_time_ms}ms)`);
+
+    res.status(statusCode).json(healthData);
+
+  } catch (error) {
+    const responseTime = Date.now() - startTime;
+    console.error('Health check error:', error.message);
+
+    res.status(500).json({
+      status: 'error',
+      database: 'error',
+      error: error.message,
+      timestamp: new Date().toISOString(),
+      response_time_ms: responseTime
+    });
+  }
+});
+
+// NEW: Sync endpoints for getting data from Supabase
+
+// Get all users from Supabase for syncing
+app.get('/users', async (req, res) => {
   try {
     console.log('🔄 Sync users request received');
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -447,7 +447,7 @@ app.get('/sync/users', async (req, res) => {
 
     if (error) {
       console.error('❌ Failed to fetch users:', error.message);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Failed to fetch users from database',
         code: 'DB_ERROR',
         details: error.message
@@ -455,21 +455,21 @@ app.get('/sync/users', async (req, res) => {
     }
 
     // Format the data to include company_name at root level
-   const formattedUsers = (users || []).map(user => ({
-  id: user.id,
-  email: user.email,
-  name: user.name,
-  role: user.role,
-  phone: user.phone,
-  company_id: user.company_id,
-  company_name: user.companies?.name || 'Unknown Company',
-  store_id: user.store_id,                        // 👈 Add this
-  store_name: user.stores?.name || 'No Store',    // 👈 Add this
-  is_active: user.is_active,
-  created_at: user.created_at,
-  updated_at: user.updated_at,
-  last_login: user.last_login
-}));
+    const formattedUsers = (users || []).map(user => ({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      phone: user.phone,
+      company_id: user.company_id,
+      company_name: user.companies?.name || 'Unknown Company',
+      store_id: user.store_id,                        // 👈 Add this
+      store_name: user.stores?.name || 'No Store',    // 👈 Add this
+      is_active: user.is_active,
+      created_at: user.created_at,
+      updated_at: user.updated_at,
+      last_login: user.last_login
+    }));
 
     console.log(`✅ Retrieved ${formattedUsers?.length || 0} users for sync`);
 
@@ -482,7 +482,7 @@ app.get('/sync/users', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Sync users error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error during sync',
       code: 'INTERNAL_ERROR'
     });
@@ -493,9 +493,9 @@ app.delete('/users/:userId', authenticateToken, requireRole(['super_admin']), as
   try {
     const { userId } = req.params;
     console.log(`🗑️ Soft deleting user: ${userId}`);
-    
+
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -506,7 +506,7 @@ app.delete('/users/:userId', authenticateToken, requireRole(['super_admin']), as
     // Soft delete - set is_active to false
     const { data: deletedUser, error } = await client
       .from('users')
-      .update({ 
+      .update({
         visible: false,
         updated_at: new Date().toISOString()
       })
@@ -516,7 +516,7 @@ app.delete('/users/:userId', authenticateToken, requireRole(['super_admin']), as
 
     if (error) {
       console.error('Delete user error:', error.message);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Failed to delete user',
         code: 'DB_DELETE_ERROR',
         details: error.message
@@ -524,7 +524,7 @@ app.delete('/users/:userId', authenticateToken, requireRole(['super_admin']), as
     }
 
     if (!deletedUser) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'User not found',
         code: 'USER_NOT_FOUND'
       });
@@ -538,171 +538,171 @@ app.delete('/users/:userId', authenticateToken, requireRole(['super_admin']), as
 
   } catch (error) {
     console.error('❌ Delete user error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
   }
 });
-  // Get all data for complete sync (users only for now, can expand later)
-  app.get('/sync/all', async (req, res) => {
-    try {
-      console.log('🔄 Complete sync request received');
+// Get all data for complete sync (users only for now, can expand later)
+app.get('/sync/all', async (req, res) => {
+  try {
+    console.log('🔄 Complete sync request received');
 
-      const client = await getSupabaseClient();
-      
-      if (!client) {
-        return res.status(503).json({
-          error: 'Database connection not available',
-          code: 'SERVICE_UNAVAILABLE'
-        });
-      }
+    const client = await getSupabaseClient();
 
-      // Get all users
-      const { data: users, error: usersError } = await client
-        .from('users')
-        .select('id, email, name, role, phone, is_active, created_at, updated_at, last_login')
-        .order('created_at', { ascending: false });
+    if (!client) {
+      return res.status(503).json({
+        error: 'Database connection not available',
+        code: 'SERVICE_UNAVAILABLE'
+      });
+    }
 
-      if (usersError) {
-        console.error('❌ Failed to fetch users:', usersError.message);
-        return res.status(500).json({ 
-          error: 'Failed to fetch users from database',
-          code: 'DB_ERROR',
-          details: usersError.message
-        });
-      }
+    // Get all users
+    const { data: users, error: usersError } = await client
+      .from('users')
+      .select('id, email, name, role, phone, is_active, created_at, updated_at, last_login')
+      .order('created_at', { ascending: false });
 
-      // You can add more tables here later (products, categories, etc.)
-      const syncData = {
-        users: users || [],
-        // products: [], // Add when you have products table
-        // categories: [], // Add when you have categories table
-        // customers: [], // Add when you have customers table
-        counts: {
-          users: users?.length || 0,
-          // products: 0,
-          // categories: 0,
-          // customers: 0
-        },
-        timestamp: new Date().toISOString(),
-        source: 'supabase'
+    if (usersError) {
+      console.error('❌ Failed to fetch users:', usersError.message);
+      return res.status(500).json({
+        error: 'Failed to fetch users from database',
+        code: 'DB_ERROR',
+        details: usersError.message
+      });
+    }
+
+    // You can add more tables here later (products, categories, etc.)
+    const syncData = {
+      users: users || [],
+      // products: [], // Add when you have products table
+      // categories: [], // Add when you have categories table
+      // customers: [], // Add when you have customers table
+      counts: {
+        users: users?.length || 0,
+        // products: 0,
+        // categories: 0,
+        // customers: 0
+      },
+      timestamp: new Date().toISOString(),
+      source: 'supabase'
+    };
+
+    console.log(`✅ Complete sync data prepared:`, syncData.counts);
+
+    res.json(syncData);
+
+  } catch (error) {
+    console.error('❌ Complete sync error:', error.message);
+    res.status(500).json({
+      error: 'Internal server error during complete sync',
+      code: 'INTERNAL_ERROR'
+    });
+  }
+});
+
+// Login endpoint
+app.post('/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    console.log(`🔐 Login attempt for: ${email}`);
+
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({
+        error: 'Email and password are required',
+        code: 'MISSING_CREDENTIALS'
+      });
+    }
+
+    // Get Supabase client
+    const client = await getSupabaseClient();
+
+    if (!client) {
+      // Fallback authentication for demo
+      console.log('⚠️ Using fallback authentication');
+
+      const demoUsers = {
+        'admin@techcorp.com': { id: 1, name: 'Demo Admin', role: 'super_admin', email: 'admin@techcorp.com' },
+        'manager@techcorp.com': { id: 2, name: 'Demo Manager', role: 'manager', email: 'manager@techcorp.com' },
+        'cashier@techcorp.com': { id: 3, name: 'Demo Cashier', role: 'cashier', email: 'cashier@techcorp.com' }
       };
 
-      console.log(`✅ Complete sync data prepared:`, syncData.counts);
-
-      res.json(syncData);
-
-    } catch (error) {
-      console.error('❌ Complete sync error:', error.message);
-      res.status(500).json({ 
-        error: 'Internal server error during complete sync',
-        code: 'INTERNAL_ERROR'
-      });
-    }
-  });
-
-  // Login endpoint
-  app.post('/auth/login', async (req, res) => {
-    try {
-      const { email, password } = req.body;
-
-      console.log(`🔐 Login attempt for: ${email}`);
-
-      // Validate input
-      if (!email || !password) {
-        return res.status(400).json({ 
-          error: 'Email and password are required',
-          code: 'MISSING_CREDENTIALS'
+      const user = demoUsers[email.toLowerCase()];
+      if (user && password === 'password123') {
+        const token = generateToken(user);
+        return res.json({
+          message: 'Login successful (fallback mode)',
+          user,
+          token,
+          source: 'fallback'
         });
-      }
-
-      // Get Supabase client
-      const client = await getSupabaseClient();
-      
-      if (!client) {
-        // Fallback authentication for demo
-        console.log('⚠️ Using fallback authentication');
-        
-        const demoUsers = {
-          'admin@techcorp.com': { id: 1, name: 'Demo Admin', role: 'super_admin', email: 'admin@techcorp.com' },
-          'manager@techcorp.com': { id: 2, name: 'Demo Manager', role: 'manager', email: 'manager@techcorp.com' },
-          'cashier@techcorp.com': { id: 3, name: 'Demo Cashier', role: 'cashier', email: 'cashier@techcorp.com' }
-        };
-        
-        const user = demoUsers[email.toLowerCase()];
-        if (user && password === 'password123') {
-          const token = generateToken(user);
-          return res.json({
-            message: 'Login successful (fallback mode)',
-            user,
-            token,
-            source: 'fallback'
-          });
-        } else {
-          return res.status(401).json({ 
-            error: 'Invalid email or password (fallback mode)',
-            code: 'INVALID_CREDENTIALS'
-          });
-        }
-      }
-
-      // Normal Supabase authentication
-      const { data: user, error } = await client
-        .from('users')
-        .select('*')
-        .eq('email', email.toLowerCase())
-        .eq('is_active', true)
-        .single();
-
-      if (error || !user) {
-        console.log(`❌ User not found: ${email}`);
-        return res.status(401).json({ 
-          error: 'Invalid email or password',
+      } else {
+        return res.status(401).json({
+          error: 'Invalid email or password (fallback mode)',
           code: 'INVALID_CREDENTIALS'
         });
       }
+    }
 
-      // Verify password
-      const isValidPassword = await bcrypt.compare(password, user.password);
-      if (!isValidPassword) {
-        console.log(`❌ Invalid password for ${email}`);
-        return res.status(401).json({ 
-          error: 'Invalid email or password',
-          code: 'INVALID_CREDENTIALS'
-        });
-      }
+    // Normal Supabase authentication
+    const { data: user, error } = await client
+      .from('users')
+      .select('*')
+      .eq('email', email.toLowerCase())
+      .eq('is_active', true)
+      .single();
 
-      // Update last login
-      await client
-        .from('users')
-        .update({ last_login: new Date().toISOString() })
-        .eq('id', user.id);
-
-      // Generate JWT token
-      const token = generateToken(user);
-
-      // Return user data (without password)
-      const { password: _, ...userWithoutPassword } = user;
-      
-      res.json({
-        message: 'Login successful',
-        user: userWithoutPassword,
-        token,
-        source: 'supabase'
-      });
-
-      console.log(`✅ User logged in: ${user.email}`);
-
-    } catch (error) {
-      console.error('Login error:', error.message);
-      res.status(500).json({ 
-        error: 'Internal server error',
-        code: 'INTERNAL_ERROR',
-        message: error.message
+    if (error || !user) {
+      console.log(`❌ User not found: ${email}`);
+      return res.status(401).json({
+        error: 'Invalid email or password',
+        code: 'INVALID_CREDENTIALS'
       });
     }
-  });
+
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      console.log(`❌ Invalid password for ${email}`);
+      return res.status(401).json({
+        error: 'Invalid email or password',
+        code: 'INVALID_CREDENTIALS'
+      });
+    }
+
+    // Update last login
+    await client
+      .from('users')
+      .update({ last_login: new Date().toISOString() })
+      .eq('id', user.id);
+
+    // Generate JWT token
+    const token = generateToken(user);
+
+    // Return user data (without password)
+    const { password: _, ...userWithoutPassword } = user;
+
+    res.json({
+      message: 'Login successful',
+      user: userWithoutPassword,
+      token,
+      source: 'supabase'
+    });
+
+    console.log(`✅ User logged in: ${user.email}`);
+
+  } catch (error) {
+    console.error('Login error:', error.message);
+    res.status(500).json({
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR',
+      message: error.message
+    });
+  }
+});
 //all get function
 // Add these staff endpoints to your server.js file
 
@@ -716,7 +716,7 @@ app.get('/staff', authenticateToken, requireRole(['super_admin', 'manager']), as
     });
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -748,7 +748,7 @@ app.get('/staff', authenticateToken, requireRole(['super_admin', 'manager']), as
 
     if (error) {
       console.error('❌ Failed to fetch staff:', error.message);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Failed to fetch staff from database',
         code: 'DB_ERROR',
         details: error.message
@@ -771,7 +771,7 @@ app.get('/staff', authenticateToken, requireRole(['super_admin', 'manager']), as
 
   } catch (error) {
     console.error('❌ Get staff error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -796,7 +796,7 @@ app.post('/staff', authenticateToken, requireRole(['super_admin', 'manager']), a
 
     // Validate required fields
     if (!name || !staff_id || !store_id || !passcode) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Name, staff ID, store ID, and passcode are required',
         code: 'MISSING_FIELDS'
       });
@@ -813,7 +813,7 @@ app.post('/staff', authenticateToken, requireRole(['super_admin', 'manager']), a
     }
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -841,7 +841,7 @@ app.post('/staff', authenticateToken, requireRole(['super_admin', 'manager']), a
 
     if (existingStaff) {
       console.log('❌ Staff ID already exists:', existingStaff);
-      return res.status(409).json({ 
+      return res.status(409).json({
         error: `Staff ID "${staff_id}" already exists`,
         code: 'STAFF_ID_EXISTS'
       });
@@ -880,7 +880,7 @@ app.post('/staff', authenticateToken, requireRole(['super_admin', 'manager']), a
         hint: insertError.hint,
         code: insertError.code
       });
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Failed to create staff member in database',
         code: 'DB_INSERT_ERROR',
         details: insertError.message
@@ -896,7 +896,7 @@ app.post('/staff', authenticateToken, requireRole(['super_admin', 'manager']), a
 
   } catch (error) {
     console.error('❌ Server error creating staff:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR',
       message: error.message
@@ -914,7 +914,7 @@ app.put('/staff/:staffId', authenticateToken, requireRole(['super_admin', 'manag
     console.log(`📝 Updating staff: ${staffId}`);
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -942,7 +942,7 @@ app.put('/staff/:staffId', authenticateToken, requireRole(['super_admin', 'manag
 
     if (error) {
       console.error('Update staff error:', error.message);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Failed to update staff member',
         code: 'DB_UPDATE_ERROR',
         details: error.message
@@ -950,7 +950,7 @@ app.put('/staff/:staffId', authenticateToken, requireRole(['super_admin', 'manag
     }
 
     if (!updatedStaff) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'Staff member not found',
         code: 'STAFF_NOT_FOUND'
       });
@@ -965,7 +965,7 @@ app.put('/staff/:staffId', authenticateToken, requireRole(['super_admin', 'manag
 
   } catch (error) {
     console.error('❌ Update staff error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -980,7 +980,7 @@ app.delete('/staff/:staffId', authenticateToken, requireRole(['super_admin', 'ma
     console.log(`🗑️ Deleting staff: ${staffId}`);
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -990,7 +990,7 @@ app.delete('/staff/:staffId', authenticateToken, requireRole(['super_admin', 'ma
 
     const { data: deletedStaff, error } = await client
       .from('staff')
-      .update({ 
+      .update({
         is_active: false,
         updated_at: new Date().toISOString()
       })
@@ -1000,14 +1000,14 @@ app.delete('/staff/:staffId', authenticateToken, requireRole(['super_admin', 'ma
 
     if (error) {
       console.error('Delete staff error:', error.message);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Failed to delete staff member',
         code: 'DB_DELETE_ERROR'
       });
     }
 
     if (!deletedStaff) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'Staff member not found',
         code: 'STAFF_NOT_FOUND'
       });
@@ -1021,7 +1021,7 @@ app.delete('/staff/:staffId', authenticateToken, requireRole(['super_admin', 'ma
 
   } catch (error) {
     console.error('❌ Delete staff error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -1042,7 +1042,7 @@ app.get('/stores', authenticateToken, async (req, res) => {
     });
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -1086,7 +1086,7 @@ app.get('/stores', authenticateToken, async (req, res) => {
 
     if (error) {
       console.error('❌ Failed to fetch stores:', error.message);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Failed to fetch stores from database',
         code: 'DB_ERROR',
         details: error.message
@@ -1103,7 +1103,7 @@ app.get('/stores', authenticateToken, async (req, res) => {
 
   } catch (error) {
     console.error('❌ Get stores error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -1117,14 +1117,14 @@ app.post('/stores', authenticateToken, requireRole(['super_admin']), async (req,
     console.log(`📝 Creating store: ${name}`);
 
     if (!name || !company_id) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Store name and company ID are required',
         code: 'MISSING_FIELDS'
       });
     }
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -1159,7 +1159,7 @@ app.post('/stores', authenticateToken, requireRole(['super_admin']), async (req,
 
     if (insertError) {
       console.error('Database error creating store:', insertError.message);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Failed to create store',
         code: 'DB_INSERT_ERROR',
         details: insertError.message
@@ -1175,7 +1175,7 @@ app.post('/stores', authenticateToken, requireRole(['super_admin']), async (req,
 
   } catch (error) {
     console.error('❌ Create store error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -1190,7 +1190,7 @@ app.get('/sync/all', async (req, res) => {
     console.log('🔄 Complete sync request received');
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -1206,7 +1206,7 @@ app.get('/sync/all', async (req, res) => {
 
     if (usersError) {
       console.error('❌ Failed to fetch users:', usersError.message);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Failed to fetch users from database',
         code: 'DB_ERROR',
         details: usersError.message
@@ -1288,7 +1288,7 @@ app.get('/sync/all', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Complete sync error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error during complete sync',
       code: 'INTERNAL_ERROR'
     });
@@ -1302,7 +1302,7 @@ app.put('/users/:userId', authenticateToken, requireRole(['super_admin', 'manage
     console.log(`📝 Updating user: ${userId}`);
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -1332,7 +1332,7 @@ app.put('/users/:userId', authenticateToken, requireRole(['super_admin', 'manage
 
     if (error) {
       console.error('Update user error:', error.message);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Failed to update user',
         code: 'DB_UPDATE_ERROR',
         details: error.message
@@ -1340,7 +1340,7 @@ app.put('/users/:userId', authenticateToken, requireRole(['super_admin', 'manage
     }
 
     if (!updatedUser) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'User not found',
         code: 'USER_NOT_FOUND'
       });
@@ -1355,254 +1355,254 @@ app.put('/users/:userId', authenticateToken, requireRole(['super_admin', 'manage
 
   } catch (error) {
     console.error('❌ Update user error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
   }
 });
-  // Register endpoint
-  app.post('/auth/register', async (req, res) => {
-    try {
-      const { email, password, name, role, phone , store_id , company_id } = req.body;
+// Register endpoint
+app.post('/auth/register', async (req, res) => {
+  try {
+    const { email, password, name, role, phone, store_id, company_id } = req.body;
 
-      console.log(`📝 Registration attempt for: ${email}`);
+    console.log(`📝 Registration attempt for: ${email}`);
 
-      // Validate input
-      if (!email || !password || !name) {
-        return res.status(400).json({ 
-          error: 'Email, password, and name are required',
-          code: 'MISSING_FIELDS'
-        });
-      }
+    // Validate input
+    if (!email || !password || !name) {
+      return res.status(400).json({
+        error: 'Email, password, and name are required',
+        code: 'MISSING_FIELDS'
+      });
+    }
 
-      // Email validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        return res.status(400).json({ 
-          error: 'Invalid email format',
-          code: 'INVALID_EMAIL'
-        });
-      }
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        error: 'Invalid email format',
+        code: 'INVALID_EMAIL'
+      });
+    }
 
-      // Password validation
-      if (password.length < 6) {
-        return res.status(400).json({ 
-          error: 'Password must be at least 6 characters long',
-          code: 'WEAK_PASSWORD'
-        });
-      }
+    // Password validation
+    if (password.length < 6) {
+      return res.status(400).json({
+        error: 'Password must be at least 6 characters long',
+        code: 'WEAK_PASSWORD'
+      });
+    }
 
-      // Get Supabase client
-      const client = await getSupabaseClient();
-      
-      if (!client) {
-        return res.status(503).json({
-          error: 'Registration unavailable - database connection failed',
-          code: 'SERVICE_UNAVAILABLE'
-        });
-      }
+    // Get Supabase client
+    const client = await getSupabaseClient();
 
-      // Check if user already exists
-      const { data: existingUser, error: checkError } = await client
-        .from('users')
-        .select('id, email')
-        .eq('email', email.toLowerCase())
-        .single();
+    if (!client) {
+      return res.status(503).json({
+        error: 'Registration unavailable - database connection failed',
+        code: 'SERVICE_UNAVAILABLE'
+      });
+    }
 
-      if (checkError && checkError.code !== 'PGRST116') {
-        console.error('Database error checking user:', checkError.message);
-        return res.status(500).json({ 
-          error: 'Database error while checking user',
-          code: 'DB_ERROR'
-        });
-      }
+    // Check if user already exists
+    const { data: existingUser, error: checkError } = await client
+      .from('users')
+      .select('id, email')
+      .eq('email', email.toLowerCase())
+      .single();
 
-      if (existingUser) {
-        return res.status(409).json({ 
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('Database error checking user:', checkError.message);
+      return res.status(500).json({
+        error: 'Database error while checking user',
+        code: 'DB_ERROR'
+      });
+    }
+
+    if (existingUser) {
+      return res.status(409).json({
+        error: 'User with this email already exists',
+        code: 'USER_EXISTS'
+      });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    // Prepare user data
+    const userData = {
+      email: email.toLowerCase().trim(),
+      password: hashedPassword,
+      name: name.trim(),
+      role: role,
+      is_active: true,
+      created_at: new Date().toISOString()
+    };
+
+    // Add phone if provided
+    if (phone && phone.trim()) {
+      userData.phone = phone.trim();
+    }
+
+    // Create user
+    const { data: user, error: insertError } = await client
+      .from('users')
+      .insert([userData])
+      .select('id, email, name, role, phone, is_active, created_at')
+      .single();
+
+    if (insertError) {
+      console.error('Database error creating user:', insertError.message);
+
+      if (insertError.code === '23505') {
+        return res.status(409).json({
           error: 'User with this email already exists',
           code: 'USER_EXISTS'
         });
       }
 
-      // Hash password
-      const hashedPassword = await bcrypt.hash(password, 12);
-
-      // Prepare user data
-      const userData = {
-        email: email.toLowerCase().trim(),
-        password: hashedPassword,
-        name: name.trim(),
-        role: role,
-        is_active: true,
-        created_at: new Date().toISOString()
-      };
-
-      // Add phone if provided
-      if (phone && phone.trim()) {
-        userData.phone = phone.trim();
-      }
-
-      // Create user
-      const { data: user, error: insertError } = await client
-        .from('users')
-        .insert([userData])
-        .select('id, email, name, role, phone, is_active, created_at')
-        .single();
-
-      if (insertError) {
-        console.error('Database error creating user:', insertError.message);
-        
-        if (insertError.code === '23505') {
-          return res.status(409).json({ 
-            error: 'User with this email already exists',
-            code: 'USER_EXISTS'
-          });
-        }
-        
-        return res.status(400).json({ 
-          error: 'Failed to create user account',
-          code: 'DB_INSERT_ERROR',
-          details: insertError.message
-        });
-      }
-
-      console.log('✅ User created successfully:', user.email);
-
-      // Generate JWT token
-      const token = generateToken(user);
-
-      res.status(201).json({
-        message: 'User registered successfully',
-        user,
-        token,
-        source: 'supabase'
-      });
-
-    } catch (error) {
-      console.error('❌ Registration error:', error.message);
-      res.status(500).json({ 
-        error: 'Internal server error during registration',
-        code: 'INTERNAL_ERROR'
+      return res.status(400).json({
+        error: 'Failed to create user account',
+        code: 'DB_INSERT_ERROR',
+        details: insertError.message
       });
     }
-  });
 
-  // Get user profile
-  app.get('/auth/profile', authenticateToken, async (req, res) => {
-    try {
-      const client = await getSupabaseClient();
-      
-      if (!client) {
-        // Return cached user info from JWT
-        return res.json({ 
-          user: req.user,
-          source: 'fallback'
-        });
-      }
+    console.log('✅ User created successfully:', user.email);
 
-      const { data: user, error } = await client
-        .from('users')
-        .select('id, email, name, role, phone, is_active, created_at, last_login')
-        .eq('id', req.user.id)
-        .single();
+    // Generate JWT token
+    const token = generateToken(user);
 
-      if (error || !user) {
-        return res.status(404).json({ 
-          error: 'User not found',
-          code: 'USER_NOT_FOUND'
-        });
-      }
-
-      res.json({ user, source: 'supabase' });
-
-    } catch (error) {
-      console.error('Profile error:', error.message);
-      res.status(500).json({ 
-        error: 'Internal server error',
-        code: 'INTERNAL_ERROR'
-      });
-    }
-  });
-
-  // FIXED: Logout endpoint with optional authentication
-  app.post('/auth/logout', optionalAuthentication, (req, res) => {
-    // Always return success for logout, regardless of token validity
-    // This prevents 403 errors when tokens are expired/invalid
-    
-    if (req.user) {
-      console.log(`✅ User logged out: ${req.user.email}`);
-    } else {
-      console.log(`✅ Logout request processed (no valid token found)`);
-    }
-    
-    res.json({ 
-      message: 'Logout successful',
-      code: 'LOGOUT_SUCCESS'
+    res.status(201).json({
+      message: 'User registered successfully',
+      user,
+      token,
+      source: 'supabase'
     });
-  });
 
-  // Get all users endpoint (for admin/manager)
-  app.get('/users', authenticateToken, requireRole(['super_admin', 'manager']), async (req, res) => {
-    try {
-      const client = await getSupabaseClient();
-      
-      if (!client) {
-        return res.status(503).json({
-          error: 'Database unavailable',
-          code: 'SERVICE_UNAVAILABLE'
-        });
-      }
+  } catch (error) {
+    console.error('❌ Registration error:', error.message);
+    res.status(500).json({
+      error: 'Internal server error during registration',
+      code: 'INTERNAL_ERROR'
+    });
+  }
+});
 
-      const { page = 1, limit = 50, role, active } = req.query;
-      const offset = (page - 1) * limit;
+// Get user profile
+app.get('/auth/profile', authenticateToken, async (req, res) => {
+  try {
+    const client = await getSupabaseClient();
 
-      let query = client
-        .from('users')
-        .select('id, email, name, role, phone, is_active, created_at, last_login', { count: 'exact' });
-
-      // Apply filters
-      if (role) {
-        query = query.eq('role', role);
-      }
-      if (active !== undefined) {
-        query = query.eq('is_active', active === 'true');
-      }
-
-      // Apply pagination
-      query = query.range(offset, offset + limit - 1);
-      query = query.order('created_at', { ascending: false });
-
-      const { data: users, error, count } = await query;
-
-      if (error) {
-        console.error('Get users error:', error.message);
-        return res.status(500).json({ 
-          error: 'Database query failed',
-          code: 'DB_ERROR'
-        });
-      }
-
-      res.json({
-        users: users || [],
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total: count,
-          totalPages: Math.ceil(count / limit)
-        }
-      });
-
-    } catch (error) {
-      console.error('Get users error:', error.message);
-      res.status(500).json({ 
-        error: 'Internal server error',
-        code: 'INTERNAL_ERROR'
+    if (!client) {
+      // Return cached user info from JWT
+      return res.json({
+        user: req.user,
+        source: 'fallback'
       });
     }
-  });
 
-  // Add these endpoints to your server.js file
+    const { data: user, error } = await client
+      .from('users')
+      .select('id, email, name, role, phone, is_active, created_at, last_login')
+      .eq('id', req.user.id)
+      .single();
+
+    if (error || !user) {
+      return res.status(404).json({
+        error: 'User not found',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+
+    res.json({ user, source: 'supabase' });
+
+  } catch (error) {
+    console.error('Profile error:', error.message);
+    res.status(500).json({
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR'
+    });
+  }
+});
+
+// FIXED: Logout endpoint with optional authentication
+app.post('/auth/logout', optionalAuthentication, (req, res) => {
+  // Always return success for logout, regardless of token validity
+  // This prevents 403 errors when tokens are expired/invalid
+
+  if (req.user) {
+    console.log(`✅ User logged out: ${req.user.email}`);
+  } else {
+    console.log(`✅ Logout request processed (no valid token found)`);
+  }
+
+  res.json({
+    message: 'Logout successful',
+    code: 'LOGOUT_SUCCESS'
+  });
+});
+
+// Get all users endpoint (for admin/manager)
+app.get('/users', authenticateToken, requireRole(['super_admin', 'manager']), async (req, res) => {
+  try {
+    const client = await getSupabaseClient();
+
+    if (!client) {
+      return res.status(503).json({
+        error: 'Database unavailable',
+        code: 'SERVICE_UNAVAILABLE'
+      });
+    }
+
+    const { page = 1, limit = 50, role, active } = req.query;
+    const offset = (page - 1) * limit;
+
+    let query = client
+      .from('users')
+      .select('id, email, name, role, phone, is_active, created_at, last_login', { count: 'exact' });
+
+    // Apply filters
+    if (role) {
+      query = query.eq('role', role);
+    }
+    if (active !== undefined) {
+      query = query.eq('is_active', active === 'true');
+    }
+
+    // Apply pagination
+    query = query.range(offset, offset + limit - 1);
+    query = query.order('created_at', { ascending: false });
+
+    const { data: users, error, count } = await query;
+
+    if (error) {
+      console.error('Get users error:', error.message);
+      return res.status(500).json({
+        error: 'Database query failed',
+        code: 'DB_ERROR'
+      });
+    }
+
+    res.json({
+      users: users || [],
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: count,
+        totalPages: Math.ceil(count / limit)
+      }
+    });
+
+  } catch (error) {
+    console.error('Get users error:', error.message);
+    res.status(500).json({
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR'
+    });
+  }
+});
+
+// Add these endpoints to your server.js file
 
 // ========================= CATEGORIES ENDPOINTS =========================
 
@@ -1616,7 +1616,7 @@ app.get('/categories', authenticateToken, requireRole(['super_admin', 'manager',
     });
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -1651,7 +1651,7 @@ app.get('/categories', authenticateToken, requireRole(['super_admin', 'manager',
 
     if (error) {
       console.error('❌ Failed to fetch categories:', error.message);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Failed to fetch categories from database',
         code: 'DB_ERROR',
         details: error.message
@@ -1668,7 +1668,7 @@ app.get('/categories', authenticateToken, requireRole(['super_admin', 'manager',
 
   } catch (error) {
     console.error('❌ Get categories error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -1684,7 +1684,7 @@ app.post('/categories', authenticateToken, requireRole(['super_admin', 'manager'
 
     // Validate required fields
     if (!name || !store_id) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Category name and store ID are required',
         code: 'MISSING_FIELDS'
       });
@@ -1701,7 +1701,7 @@ app.post('/categories', authenticateToken, requireRole(['super_admin', 'manager'
     }
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -1730,7 +1730,7 @@ app.post('/categories', authenticateToken, requireRole(['super_admin', 'manager'
 
     if (insertError) {
       console.error('Database error creating category:', insertError.message);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Failed to create category',
         code: 'DB_INSERT_ERROR',
         details: insertError.message
@@ -1746,7 +1746,7 @@ app.post('/categories', authenticateToken, requireRole(['super_admin', 'manager'
 
   } catch (error) {
     console.error('❌ Create category error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -1766,7 +1766,7 @@ app.get('/products', authenticateToken, requireRole(['super_admin', 'manager', '
     });
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -1822,7 +1822,7 @@ app.get('/products', authenticateToken, requireRole(['super_admin', 'manager', '
 
     if (error) {
       console.error('❌ Failed to fetch products:', error.message);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Failed to fetch products from database',
         code: 'DB_ERROR',
         details: error.message
@@ -1839,7 +1839,7 @@ app.get('/products', authenticateToken, requireRole(['super_admin', 'manager', '
 
   } catch (error) {
     console.error('❌ Get products error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -1849,7 +1849,7 @@ app.get('/products', authenticateToken, requireRole(['super_admin', 'manager', '
 // POST /products - Create new product
 app.post('/products', authenticateToken, requireRole(['super_admin', 'manager']), async (req, res) => {
   try {
-    const { 
+    const {
       name, description, sku, barcode, category_id, store_id,
       default_price, manila_price, delivery_price, wholesale_price,
       stock_quantity, min_stock_level, max_stock_level, unit,
@@ -1860,7 +1860,7 @@ app.post('/products', authenticateToken, requireRole(['super_admin', 'manager'])
 
     // Validate required fields
     if (!name || !store_id || !default_price) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Product name, store ID, and default price are required',
         code: 'MISSING_FIELDS'
       });
@@ -1877,7 +1877,7 @@ app.post('/products', authenticateToken, requireRole(['super_admin', 'manager'])
     }
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -1895,7 +1895,7 @@ app.post('/products', authenticateToken, requireRole(['super_admin', 'manager'])
         .single();
 
       if (existingProduct) {
-        return res.status(409).json({ 
+        return res.status(409).json({
           error: `SKU "${sku}" already exists`,
           code: 'SKU_EXISTS'
         });
@@ -1946,7 +1946,7 @@ app.post('/products', authenticateToken, requireRole(['super_admin', 'manager'])
 
     if (insertError) {
       console.error('Database error creating product:', insertError.message);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Failed to create product',
         code: 'DB_INSERT_ERROR',
         details: insertError.message
@@ -1962,7 +1962,7 @@ app.post('/products', authenticateToken, requireRole(['super_admin', 'manager'])
 
   } catch (error) {
     console.error('❌ Create product error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -1978,7 +1978,7 @@ app.put('/products/:productId', authenticateToken, requireRole(['super_admin', '
     console.log(`📝 Updating product: ${productId}`);
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -2014,7 +2014,7 @@ app.put('/products/:productId', authenticateToken, requireRole(['super_admin', '
 
     if (error) {
       console.error('Update product error:', error.message);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Failed to update product',
         code: 'DB_UPDATE_ERROR',
         details: error.message
@@ -2022,7 +2022,7 @@ app.put('/products/:productId', authenticateToken, requireRole(['super_admin', '
     }
 
     if (!updatedProduct) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'Product not found',
         code: 'PRODUCT_NOT_FOUND'
       });
@@ -2037,7 +2037,7 @@ app.put('/products/:productId', authenticateToken, requireRole(['super_admin', '
 
   } catch (error) {
     console.error('❌ Update product error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -2052,7 +2052,7 @@ app.delete('/products/:productId', authenticateToken, requireRole(['super_admin'
     console.log(`🗑️ Deleting product: ${productId}`);
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -2062,7 +2062,7 @@ app.delete('/products/:productId', authenticateToken, requireRole(['super_admin'
 
     const { data: deletedProduct, error } = await client
       .from('products')
-      .update({ 
+      .update({
         is_active: false,
         updated_at: new Date().toISOString()
       })
@@ -2072,14 +2072,14 @@ app.delete('/products/:productId', authenticateToken, requireRole(['super_admin'
 
     if (error) {
       console.error('Delete product error:', error.message);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Failed to delete product',
         code: 'DB_DELETE_ERROR'
       });
     }
 
     if (!deletedProduct) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'Product not found',
         code: 'PRODUCT_NOT_FOUND'
       });
@@ -2093,7 +2093,7 @@ app.delete('/products/:productId', authenticateToken, requireRole(['super_admin'
 
   } catch (error) {
     console.error('❌ Delete product error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -2108,7 +2108,7 @@ app.get('/inventory/movements', authenticateToken, requireRole(['super_admin', '
     console.log('🔄 Get inventory movements request');
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -2144,7 +2144,7 @@ app.get('/inventory/movements', authenticateToken, requireRole(['super_admin', '
 
     if (error) {
       console.error('❌ Failed to fetch inventory movements:', error.message);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Failed to fetch inventory movements',
         code: 'DB_ERROR',
         details: error.message
@@ -2159,7 +2159,7 @@ app.get('/inventory/movements', authenticateToken, requireRole(['super_admin', '
 
   } catch (error) {
     console.error('❌ Get inventory movements error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -2174,14 +2174,14 @@ app.post('/inventory/adjust', authenticateToken, requireRole(['super_admin', 'ma
     console.log(`📦 Adjusting stock for product: ${product_id} to ${new_quantity}`);
 
     if (!product_id || new_quantity === undefined) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Product ID and new quantity are required',
         code: 'MISSING_FIELDS'
       });
     }
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -2209,7 +2209,7 @@ app.post('/inventory/adjust', authenticateToken, requireRole(['super_admin', 'ma
     // Update product stock
     const { error: updateError } = await client
       .from('products')
-      .update({ 
+      .update({
         stock_quantity: new_quantity,
         updated_at: new Date().toISOString()
       })
@@ -2259,7 +2259,7 @@ app.post('/inventory/adjust', authenticateToken, requireRole(['super_admin', 'ma
 
   } catch (error) {
     console.error('❌ Adjust stock error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -2274,7 +2274,7 @@ app.get('/products/stats', authenticateToken, requireRole(['super_admin', 'manag
     console.log('📊 Get product stats request');
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -2324,7 +2324,7 @@ app.get('/products/stats', authenticateToken, requireRole(['super_admin', 'manag
 
   } catch (error) {
     console.error('❌ Get product stats error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -2336,7 +2336,7 @@ app.get('/companies', authenticateToken, requireRole(['super_admin']), async (re
     console.log('🔄 Get companies request received');
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -2355,7 +2355,7 @@ app.get('/companies', authenticateToken, requireRole(['super_admin']), async (re
 
     if (error) {
       console.error('❌ Failed to fetch companies:', error.message);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Failed to fetch companies from database',
         code: 'DB_ERROR',
         details: error.message
@@ -2372,7 +2372,7 @@ app.get('/companies', authenticateToken, requireRole(['super_admin']), async (re
 
   } catch (error) {
     console.error('❌ Get companies error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -2394,7 +2394,7 @@ app.get('/companies', authenticateToken, async (req, res) => {
     });
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -2445,7 +2445,7 @@ app.get('/companies', authenticateToken, async (req, res) => {
 
     if (error) {
       console.error('❌ Failed to fetch companies:', error.message);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Failed to fetch companies from database',
         code: 'DB_ERROR',
         details: error.message
@@ -2481,7 +2481,7 @@ app.get('/companies', authenticateToken, async (req, res) => {
 
   } catch (error) {
     console.error('❌ Get companies error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -2491,14 +2491,14 @@ app.get('/companies', authenticateToken, async (req, res) => {
 // POST /companies - Create new company (Super Admin only)
 app.post('/companies', authenticateToken, requireRole(['super_admin']), async (req, res) => {
   try {
-    const { 
-      name, 
-      description, 
-      logo_url, 
-      website, 
-      contact_email, 
-      contact_phone, 
-      address, 
+    const {
+      name,
+      description,
+      logo_url,
+      website,
+      contact_email,
+      contact_phone,
+      address,
       tax_id,
       email,
       phone
@@ -2508,14 +2508,14 @@ app.post('/companies', authenticateToken, requireRole(['super_admin']), async (r
 
     // Validate required fields
     if (!name) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Company name is required',
         code: 'MISSING_FIELDS'
       });
     }
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -2532,7 +2532,7 @@ app.post('/companies', authenticateToken, requireRole(['super_admin']), async (r
       .single();
 
     if (existingCompany) {
-      return res.status(409).json({ 
+      return res.status(409).json({
         error: `Company "${name}" already exists`,
         code: 'COMPANY_EXISTS'
       });
@@ -2565,7 +2565,7 @@ app.post('/companies', authenticateToken, requireRole(['super_admin']), async (r
 
     if (insertError) {
       console.error('Database error creating company:', insertError.message);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Failed to create company',
         code: 'DB_INSERT_ERROR',
         details: insertError.message
@@ -2581,7 +2581,7 @@ app.post('/companies', authenticateToken, requireRole(['super_admin']), async (r
 
   } catch (error) {
     console.error('❌ Create company error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -2597,7 +2597,7 @@ app.put('/companies/:companyId', authenticateToken, requireRole(['super_admin'])
     console.log(`📝 Updating company: ${companyId}`);
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -2625,7 +2625,7 @@ app.put('/companies/:companyId', authenticateToken, requireRole(['super_admin'])
 
     if (error) {
       console.error('Update company error:', error.message);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Failed to update company',
         code: 'DB_UPDATE_ERROR',
         details: error.message
@@ -2633,7 +2633,7 @@ app.put('/companies/:companyId', authenticateToken, requireRole(['super_admin'])
     }
 
     if (!updatedCompany) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'Company not found',
         code: 'COMPANY_NOT_FOUND'
       });
@@ -2648,7 +2648,7 @@ app.put('/companies/:companyId', authenticateToken, requireRole(['super_admin'])
 
   } catch (error) {
     console.error('❌ Update company error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
@@ -2663,7 +2663,7 @@ app.delete('/companies/:companyId', authenticateToken, requireRole(['super_admin
     console.log(`🗑️ Deleting company: ${companyId}`);
 
     const client = await getSupabaseClient();
-    
+
     if (!client) {
       return res.status(503).json({
         error: 'Database connection not available',
@@ -2673,7 +2673,7 @@ app.delete('/companies/:companyId', authenticateToken, requireRole(['super_admin
 
     const { data: deletedCompany, error } = await client
       .from('companies')
-      .update({ 
+      .update({
         is_active: false,
         updated_at: new Date().toISOString()
       })
@@ -2683,14 +2683,14 @@ app.delete('/companies/:companyId', authenticateToken, requireRole(['super_admin
 
     if (error) {
       console.error('Delete company error:', error.message);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Failed to delete company',
         code: 'DB_DELETE_ERROR'
       });
     }
 
     if (!deletedCompany) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'Company not found',
         code: 'COMPANY_NOT_FOUND'
       });
@@ -2704,38 +2704,38 @@ app.delete('/companies/:companyId', authenticateToken, requireRole(['super_admin
 
   } catch (error) {
     console.error('❌ Delete company error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
     });
   }
 });
 
-  // Error handling middleware
-  app.use((error, req, res, next) => {
-    console.error('Unhandled error:', error.message);
-    res.status(500).json({ 
-      error: 'Internal server error',
-      code: 'UNHANDLED_ERROR'
-    });
+// Error handling middleware
+app.use((error, req, res, next) => {
+  console.error('Unhandled error:', error.message);
+  res.status(500).json({
+    error: 'Internal server error',
+    code: 'UNHANDLED_ERROR'
   });
+});
 
-  // 404 handler
-  app.use('*', (req, res) => {
-    res.status(404).json({ 
-      error: 'Endpoint not found',
-      code: 'NOT_FOUND',
-      path: req.originalUrl,
-      method: req.method
-    });
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({
+    error: 'Endpoint not found',
+    code: 'NOT_FOUND',
+    path: req.originalUrl,
+    method: req.method
   });
+});
 
-  // For Vercel, we need to export the app
-  module.exports = app;
+// For Vercel, we need to export the app
+module.exports = app;
 
-  // Only start server locally (not on Vercel)
-  if (process.env.NODE_ENV !== 'production') {
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-    });
-  }
+// Only start server locally (not on Vercel)
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
+}
