@@ -438,9 +438,11 @@ app.get('/sync/users', async (req, res) => {
         created_at, 
         updated_at, 
         last_login,
+        visible,
         companies!company_id(name)
         stores!store_id(name)  
       `)
+      .eq('visible', true)
       .order('created_at', { ascending: false });
 
     if (error) {
