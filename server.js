@@ -728,8 +728,9 @@ app.get('/staff', authenticateToken, requireRole(['super_admin', 'manager']), as
       .from('staff')
       .select(`
         *,
-        stores!store_id(name)
-      `) // ✅ Added JOIN to get store name
+        stores!store_id(name),
+        companies!company_id(name)
+      `) // ✅ Added JOIN to get both store AND company name
       .eq('is_active', true)
       .order('created_at', { ascending: false });
 
@@ -758,11 +759,12 @@ app.get('/staff', authenticateToken, requireRole(['super_admin', 'manager']), as
       });
     }
 
-    // ✅ Format staff data to include store_name at root level
+    // ✅ Format staff data to include store_name AND company_name at root level
     const staffWithRole = staff.map(member => ({
       ...member,
       role: member.position || member.role || 'staff',
-      store_name: member.stores?.name || 'No Store' // ✅ Add store_name
+      store_name: member.stores?.name || 'No Store',
+      company_name: member.companies?.name || 'Unknown Company' // ✅ Add company_name
     }));
 
     console.log(`✅ Retrieved ${staffWithRole?.length || 0} staff members`);
@@ -781,7 +783,6 @@ app.get('/staff', authenticateToken, requireRole(['super_admin', 'manager']), as
     });
   }
 });
-
 // POST /staff - Create new staff member with store validation
 app.post('/staff', authenticateToken, requireRole(['super_admin', 'manager']), async (req, res) => {
   try {
